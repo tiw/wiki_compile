@@ -1,0 +1,36 @@
+# KB-Compiler Configuration Example
+# Copy to ~/.config/kb-compiler/config.yaml and fill in your values
+
+# Kimi API Configuration (required)
+
+## Option 1: Kimi 开放平台 (默认)
+# kimi_api_key: "${KIMI_API_KEY}"
+# kimi_base_url: "https://api.moonshot.cn/v1"
+# kimi_model: "moonshot-v1-128k"
+# kimi_code_mode: false
+
+## Option 2: Kimi Code 订阅 (推荐)
+kimi_api_key: "${KIMI_API_KEY}"
+kimi_base_url: "https://api.kimi.com/coding/"
+kimi_model: "kimi-k2-5"
+kimi_code_mode: true
+
+# Knowledge Base Paths
+kb_root: "~/KnowledgeBase"
+# Or specify individual paths:
+# raw_dir: "~/KnowledgeBase/raw"
+# wiki_dir: "~/KnowledgeBase/wiki"
+# output_dir: "~/KnowledgeBase/output"
+# meta_dir: "~/KnowledgeBase/_meta"
+
+# Obsidian Configuration
+# Option 1: Use vault path (recommended)
+obsidian_vault_path: "~/Documents/ObsidianVault"
+# Option 2: Use vault name (requires obsidian-cli)
+# obsidian_vault: "MyVault"
+
+# Compilation Settings
+incremental_compile: true
+max_concurrent_requests: 3
+chunk_size: 8000
+chunk_overlap: 500

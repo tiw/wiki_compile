@@ -126,7 +126,7 @@ This knowledge base is empty. Run `kb-compiler compile` after adding documents.
     config_template = f"""# Knowledge Compiler Configuration
 # Place this in ~/.config/kb-compiler/config.yaml
 
-kimi_api_key: "{os.environ.get('KIMI_API_KEY', 'your-api-key-here')}"
+kimi_api_key: "your-api-key-here"  # Set via KIMI_API_KEY environment variable
 kimi_model: "moonshot-v1-128k"
 
 kb_root: "{path}"

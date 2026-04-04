@@ -18,6 +18,12 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # LLM Provider Selection
+    llm_provider: str = Field(
+        default="kimi",
+        description="LLM provider: 'kimi' or 'local'",
+    )
+
     # Kimi API Configuration
     kimi_api_key: str = Field(default="", description="Kimi API key")
     kimi_base_url: str = Field(
@@ -32,6 +38,20 @@ class Settings(BaseSettings):
     kimi_code_mode: bool = Field(
         default=False,
         description="Use Kimi Code API format (anthropic-messages)",
+    )
+
+    # Local LLM Configuration (MLX, Ollama, etc.)
+    local_llm_base_url: str = Field(
+        default="http://127.0.0.1:8017/v1",
+        description="Local LLM OpenAI-compatible API base URL",
+    )
+    local_llm_api_key: str = Field(
+        default="dandan",
+        description="Local LLM API key",
+    )
+    local_llm_model: str = Field(
+        default="Qwen3___5-27B-Claude-4___6-Opus-Distilled-MLX-6bit",
+        description="Local LLM model name",
     )
 
     # Knowledge Base Paths
@@ -81,8 +101,17 @@ class Settings(BaseSettings):
     def validate(self) -> list[str]:
         """Validate configuration and return list of errors."""
         errors = []
-        if not self.kimi_api_key:
-            errors.append("KIMI_API_KEY environment variable is not set")
+
+        # Validate LLM provider
+        if self.llm_provider not in ["kimi", "local"]:
+            errors.append(f"Invalid llm_provider: {self.llm_provider}. Use 'kimi' or 'local'")
+
+        # Validate based on provider
+        if self.llm_provider == "kimi" and not self.kimi_api_key:
+            errors.append("KIMI_API_KEY environment variable is not set (required for kimi provider)")
+
+        # Local LLM doesn't require API key validation (it's optional)
+
         if not self.obsidian_vault and not self.obsidian_vault_path:
             errors.append("Either OBSIDIAN_VAULT or OBSIDIAN_VAULT_PATH must be set")
         return errors

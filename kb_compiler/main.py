@@ -19,6 +19,11 @@ from kb_compiler.phases.compile import CompilationPipeline
 from kb_compiler.phases.ingest import DocumentIngester, QuickCapture
 from kb_compiler.phases.maintenance import FeedbackManager, WikiLinter
 from kb_compiler.phases.query import QueryEngine, QueryOutputFormatter
+from kb_compiler.qmd.chunker import Chunker
+from kb_compiler.qmd.embeddings import create_embedding_provider
+from kb_compiler.qmd.qmd_search import QmdSearchEngine
+from kb_compiler.qmd.qmd_store import QmdIndexStore
+from kb_compiler.qmd.reranker import FlashRankReranker, LLMReranker, NullReranker
 
 app = typer.Typer(
     name="kb-compiler",
@@ -255,6 +260,7 @@ def capture(
 def compile(
     full: bool = typer.Option(False, "--full", help="Force full recompile"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be compiled"),
+    skip_qmd: bool = typer.Option(False, "--skip-qmd", help="Skip qmd index rebuild"),
 ):
     """Compile raw documents into wiki."""
     settings = get_settings()
@@ -291,6 +297,40 @@ def compile(
             console.print("[yellow]No changes to compile.[/]")
         else:
             console.print(f"[red]Compilation failed: {result}[/]")
+            return
+
+        # Build qmd index unless skipped
+        if not skip_qmd and result["status"] in ("success", "no_changes"):
+            try:
+                embedder = create_embedding_provider(
+                    provider="auto",
+                    base_url=settings.local_llm_base_url if settings.llm_provider == "local" else "",
+                    model="",
+                    api_key=settings.local_llm_api_key if settings.llm_provider == "local" else "",
+                )
+                store = QmdIndexStore(
+                    db_path=settings.meta_dir / "qmd.db",
+                    embedding_dim=embedder.dim,
+                )
+                engine = QmdSearchEngine(
+                    wiki_dir=settings.wiki_dir,
+                    store=store,
+                    embedder=embedder,
+                    chunker=Chunker(),
+                )
+                qmd_result = await engine.build_index()
+                if result["status"] == "success":
+                    console.print(
+                        f"[green]qmd index: {qmd_result['indexed_chunks']} chunks, "
+                        f"{qmd_result['indexed_concepts']} concepts[/]"
+                    )
+            except ImportError:
+                console.print(
+                    "[yellow]qmd skipped: sqlite-vec not installed. "
+                    "Install with: pip install 'kb-compiler[qmd]'[/]"
+                )
+            except Exception as e:
+                console.print(f"[yellow]qmd index failed: {e}[/]")
 
     asyncio.run(run())
 
@@ -301,29 +341,102 @@ def query(
     save: Optional[str] = typer.Option(None, "--save", "-s", help="Save result to file"),
     explore: Optional[str] = typer.Option(None, "--explore", "-e", help="Explore a concept"),
     compare: tuple[str, str] = typer.Option((None, None), "--compare", "-c", help="Compare two concepts"),
+    no_qmd: bool = typer.Option(False, "--no-qmd", help="Use legacy query engine (fallback)"),
+    rerank: Optional[str] = typer.Option(None, "--rerank", help="Reranker: none, flashrank, llm"),
 ):
     """Query the compiled wiki knowledge."""
     settings = get_settings()
     llm, obsidian, _ = get_clients(settings)
 
-    engine = QueryEngine(llm, obsidian, settings.wiki_dir)
-
     async def run():
-        if explore:
-            result = await engine.explore(explore)
-        elif compare[0] and compare[1]:
-            result = await engine.compare(compare[0], compare[1])
-        else:
-            result = await engine.query(question)
+        if no_qmd or explore or (compare[0] and compare[1]):
+            # Legacy engine for fallback, explore, and compare
+            engine = QueryEngine(llm, obsidian, settings.wiki_dir)
+            if explore:
+                result = await engine.explore(explore)
+            elif compare[0] and compare[1]:
+                result = await engine.compare(compare[0], compare[1])
+            else:
+                result = await engine.query(question)
 
-        # Display result
-        QueryOutputFormatter.format_terminal(result)
+            QueryOutputFormatter.format_terminal(result)
 
-        # Save if requested
-        if save:
-            feedback = FeedbackManager(settings.output_dir, obsidian)
-            filepath = feedback.save_query_result(question or explore or f"{compare[0]}_vs_{compare[1]}", result)
-            console.print(f"[dim]Saved to: {filepath}[/]")
+            if save:
+                feedback = FeedbackManager(settings.output_dir, obsidian)
+                filepath = feedback.save_query_result(question or explore or f"{compare[0]}_vs_{compare[1]}", result)
+                console.print(f"[dim]Saved to: {filepath}[/]")
+            return
+
+        # Default path: qmd hybrid search
+        try:
+            embedder = create_embedding_provider(
+                provider="auto",
+                base_url=settings.local_llm_base_url if settings.llm_provider == "local" else "",
+                model="",
+                api_key=settings.local_llm_api_key if settings.llm_provider == "local" else "",
+            )
+            store = QmdIndexStore(
+                db_path=settings.meta_dir / "qmd.db",
+                embedding_dim=embedder.dim,
+            )
+            engine = QmdSearchEngine(
+                wiki_dir=settings.wiki_dir,
+                store=store,
+                embedder=embedder,
+                chunker=Chunker(),
+            )
+
+            # Attach reranker
+            if rerank == "flashrank":
+                engine.reranker = FlashRankReranker()
+            elif rerank == "llm":
+                engine.reranker = LLMReranker(llm)
+            else:
+                engine.reranker = NullReranker()
+
+            results = await engine.retrieve(question, top_k=5)
+
+            if not results:
+                console.print("[yellow]No relevant concepts found in the knowledge base.[/]")
+                return
+
+            # Format into a QueryResult-like answer for display/save
+            lines = ["# Query Result\n", f"**Sources:** {', '.join(r.concept_name for r in results)}\n", "## Answer\n"]
+            for r in results:
+                header = f"### [{r.concept_name}]"
+                if r.section_header:
+                    header += f" {r.section_header}"
+                lines.append(header)
+                lines.append(r.content)
+                lines.append("")
+
+            answer = "\n\n".join(lines)
+
+            from kb_compiler.phases.query import QueryResult
+            result = QueryResult(
+                answer=answer,
+                sources=[r.concept_name for r in results],
+                confidence="high" if len(results) >= 2 else "medium",
+                suggestions=[],
+            )
+
+            QueryOutputFormatter.format_terminal(result)
+
+            if save:
+                feedback = FeedbackManager(settings.output_dir, obsidian)
+                filepath = feedback.save_query_result(question, result)
+                console.print(f"[dim]Saved to: {filepath}[/]")
+
+        except FileNotFoundError:
+            console.print(
+                "[red]qmd index not found. Run 'kb-compiler compile' or 'qmd index-rebuild' first.[/]"
+            )
+            raise typer.Exit(1)
+        except ImportError:
+            console.print(
+                "[red]qmd requires sqlite-vec. Install with: pip install 'kb-compiler[qmd]'[/]"
+            )
+            raise typer.Exit(1)
 
     asyncio.run(run())
 

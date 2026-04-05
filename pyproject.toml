@@ -21,10 +21,16 @@ requires-python = ">=3.10"
 
 [project.scripts]
 kb-compiler = "kb_compiler.main:app"
+qmd = "kb_compiler.qmd_cli:app"
 
 [project.optional-dependencies]
 kimi-code = [
     "anthropic>=0.20.0",
+]
+qmd = [
+    "sqlite-vec>=0.1.0",
+    "sentence-transformers>=2.5.0",
+    "flashrank>=0.2.0",
 ]
 dev = [
     "pytest>=7.0.0",

@@ -92,10 +92,12 @@ class QmdIndexStore:
             """
         )
 
-        # Create FTS5 external content table
+        # Create FTS5 external content table with title fields for boosting
         cursor.execute(
             """
             CREATE VIRTUAL TABLE fts_chunks USING fts5(
+                concept_name,
+                section_header,
                 content,
                 content='chunks',
                 content_rowid='id'
@@ -149,7 +151,10 @@ class QmdIndexStore:
 
         # Populate FTS5 index
         cursor.execute(
-            "INSERT INTO fts_chunks(rowid, content) SELECT id, content FROM chunks"
+            """
+            INSERT INTO fts_chunks(rowid, concept_name, section_header, content)
+            SELECT id, concept_name, section_header, content FROM chunks
+            """
         )
         cursor.execute("INSERT INTO fts_chunks(fts_chunks) VALUES('optimize')")
 
@@ -174,9 +179,19 @@ class QmdIndexStore:
         fts_matches AS (
             SELECT rowid AS id, rank AS fts_score
             FROM fts_chunks
-            WHERE content MATCH ?
+            WHERE fts_chunks MATCH ?
             ORDER BY rank
             LIMIT ?
+        ),
+        title_matches AS (
+            SELECT rowid AS id
+            FROM fts_chunks
+            WHERE concept_name MATCH ?
+        ),
+        section_matches AS (
+            SELECT rowid AS id
+            FROM fts_chunks
+            WHERE section_header MATCH ?
         ),
         vec_matches AS (
             SELECT row_id AS id, distance AS vec_score
@@ -197,7 +212,12 @@ class QmdIndexStore:
         ),
         combined AS (
             SELECT id, fts_rank, NULL AS vec_rank,
-                   1.0 / (? + fts_rank) AS rrf_score
+                   1.0 / (? + fts_rank) *
+                   CASE
+                       WHEN id IN (SELECT id FROM title_matches) THEN 1.5
+                       WHEN id IN (SELECT id FROM section_matches) THEN 1.3
+                       ELSE 1.0
+                   END AS rrf_score
             FROM fts_ranked
             UNION ALL
             SELECT id, NULL AS fts_rank, vec_rank,
@@ -224,6 +244,8 @@ class QmdIndexStore:
         params = (
             query,
             k,
+            query,
+            query,
             query_vec,
             k,
             rrf_k,

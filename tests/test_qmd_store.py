@@ -71,3 +71,34 @@ def test_search_hybrid_with_reranking_scores(store):
     for r in results:
         assert r.score > 0
         assert r.content in ("alpha", "beta")
+
+
+def test_title_boost_prioritizes_concept_name_match(store):
+    """When query matches concept_name, it should outrank body-only matches."""
+    chunks = [
+        Chunk(
+            id="c1",
+            source_path="a.md",
+            concept_name="Agent",
+            section_header=None,
+            content="some generic text here",
+            token_count=4,
+        ),
+        Chunk(
+            id="c2",
+            source_path="b.md",
+            concept_name="Random",
+            section_header="Agent Architecture",
+            content="this page talks about agent a lot and has many agent words repeated agent agent",
+            token_count=12,
+        ),
+    ]
+    embeddings = [
+        [0.0, 0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0, 0.0],
+    ]
+    store.rebuild(chunks, embeddings)
+
+    results = store.search_hybrid("agent", query_embedding=[0.0, 0.0, 0.0, 0.0], k=10)
+    ids = [r.chunk_id for r in results]
+    assert ids[0] == "c1", f"Expected title-matching 'Agent' first, got {ids}"

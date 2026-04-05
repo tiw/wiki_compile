@@ -184,7 +184,6 @@ class QmdIndexStore:
             WHERE embedding MATCH ?
               AND k = ?
             ORDER BY distance
-            LIMIT ?
         ),
         fts_ranked AS (
             SELECT id, fts_score,
@@ -226,7 +225,6 @@ class QmdIndexStore:
             query,
             k,
             query_vec,
-            k,
             k,
             rrf_k,
             rrf_k,

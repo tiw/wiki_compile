@@ -54,10 +54,18 @@ class LLMEvaluator:
             data = json.load(f)
 
         # Extract file -> concepts mapping
+        # Store both relative path and basename for flexible lookup
         golden_concepts = {}
         for file_path, meta in data.get("files", {}).items():
-            rel_path = Path(file_path).name
-            golden_concepts[rel_path] = meta.get("concepts_extracted", [])
+            # Get relative path from KB root (e.g., "AI研发转型研究/04-六象限演进与技术设计.md")
+            path_obj = Path(file_path)
+            try:
+                # Try to get path relative to raw/ directory
+                rel_path = path_obj.relative_to(Path("/Users/ting/KnowledgeBase/raw"))
+            except ValueError:
+                # If not under raw/, use the filename only
+                rel_path = path_obj.name
+            golden_concepts[str(rel_path)] = meta.get("concepts_extracted", [])
 
         return golden_concepts
 
@@ -134,7 +142,11 @@ class LLMEvaluator:
         console.print(f"[blue]Evaluating {len(files)} documents with local LLM...[/]")
 
         for i, filename in enumerate(files):
+            # Handle both flat and nested paths
             file_path = self.raw_dir / filename
+            if not file_path.exists():
+                # Try with just the basename
+                file_path = self.raw_dir / Path(filename).name
             if not file_path.exists():
                 console.print(f"[yellow]Skipping {filename}: file not found[/]")
                 continue

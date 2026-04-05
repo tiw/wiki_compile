@@ -33,55 +33,55 @@ class Concept:
 class ConceptExtractor:
     """Extract concepts from raw documents using LLM."""
 
-    CONCEPT_EXTRACTION_PROMPT = """Analyze the following documents and extract key concepts.
+    CONCEPT_EXTRACTION_PROMPT = """Analyze the following documents and extract KEY CONCEPTS only.
 
 Documents:
 {documents}
 
-For each key concept identified, provide:
-1. Concept name (short, clear, unique - max 5 words)
-2. One-sentence summary (max 200 chars)
-3. Key facts with specific data/numbers (max 3 items, each max 150 chars)
-4. Source files where this concept appears
-5. Related concepts that should link to this one (max 5 items)
+WHAT IS A KEY CONCEPT:
+- Core ideas, theories, frameworks that organize knowledge
+- Abstractions that connect multiple facts
+- NOT implementation details, API names, or technical jargon
+- NOT generic terms like "算法" or "方法"
 
-IMPORTANT JSON FORMATTING RULES:
-- Output MUST be valid JSON
-- NO newlines inside string values - use \\n for line breaks
-- NO trailing commas
-- All strings must be on single lines
-- Escape quotes with \\"
+GOOD examples:
+✓ "主动感知" (抽象认知框架)
+✓ "观测器设计" (控制论核心概念)
+✓ "注意力机制" (神经科学到AI的桥接概念)
 
+BAD examples:
+✗ "Query-Key-Value机制" (实现细节)
+✗ "并行化训练" (方法论而非概念)
+✗ "mHC机制" (未解释的缩写)
+
+For each concept, provide:
+1. Concept name (clear, max 4 words, avoid jargon)
+2. One-sentence summary (what it IS, not how it works)
+3. Key facts with specific data/numbers (max 3 items)
+4. Source files
+5. Related concepts (genuine connections, max 3)
+
+IMPORTANT JSON FORMATTING:
+- Valid JSON only, no markdown
+- NO newlines inside strings - use \\n
 Output as JSON array:
 [
   {{
-    "name": "Concept Name",
-    "summary": "One sentence definition",
-    "key_facts": ["Fact 1 with data", "Fact 2"],
+    "name": "概念名称",
+    "summary": "一句话定义这个概念的内涵",
+    "key_facts": ["具体事实1", "具体事实2"],
     "sources": ["source_file.md"],
-    "related": ["Related Concept 1", "Related Concept 2"],
-    "contradictions": ["Source A says X but Source B says Y"],
-    "open_questions": ["What about Z?"]
+    "related": ["相关概念1", "相关概念2"],
+    "contradictions": [],
+    "open_questions": []
   }}
 ]
 
-CRITICAL RULES:
-- **ALL output must be in Chinese (中文)**
-- Concept names should be in Chinese
-- Summaries must be in Chinese
-- All JSON string values must be in Chinese
-
-Rules:
-- Extract **5-12 concepts** per batch (aim for quality over quantity)
-- Include core concepts, methodologies, frameworks, and metaphors mentioned
-- Include specific techniques, models, and analogies
-- Use clear, searchable Chinese concept names
-- Preserve specific numbers, dates, and quotes
-- Note when sources disagree
-- Identify genuinely related concepts, not just similar words
-- Keep all text concise to avoid JSON parsing errors
-
-SELF-CHECK: After listing concepts, review if you missed any important terms, frameworks, or metaphors from the source documents. If so, add them."""
+CRITICAL:
+- **ALL output in Chinese (中文)**
+- Extract **5-8 high-quality concepts** only
+- Prefer abstract frameworks over technical implementations
+- Quality > Quantity"""
 
     def __init__(self, llm_client: KimiClient):
         self.llm = llm_client

@@ -28,6 +28,7 @@ def create_llm_client(
     base_url: str = "https://api.moonshot.cn/v1",
     model: str = "moonshot-v1-128k",
     code_mode: bool = False,
+    provider: str = "kimi",
 ):
     """Factory function to create appropriate LLM client.
 
@@ -36,7 +37,14 @@ def create_llm_client(
         base_url: API base URL
         model: Model name
         code_mode: If True, use Kimi Code API (anthropic format)
+        provider: LLM provider - 'kimi' or 'local'
     """
+    if provider == "local":
+        # Use local LLM (MLX, Ollama, etc.) with OpenAI-compatible API
+        console.print(f"[blue]Using local LLM: {model}[/]")
+        from kb_compiler.core.local_llm import LocalLLMClient
+        return LocalLLMClient(api_key=api_key, base_url=base_url, model=model)
+
     if code_mode or "kimi.com/coding" in base_url:
         # Use Anthropic SDK for Kimi Code
         try:

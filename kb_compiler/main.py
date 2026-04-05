@@ -34,15 +34,29 @@ def get_clients(settings: Settings):
     if errors:
         for error in errors:
             console.print(f"[red]Config Error: {error}[/]")
-        console.print("\n[yellow]Set KIMI_API_KEY environment variable to use Kimi API.[/]")
+        if settings.llm_provider == "kimi":
+            console.print("\n[yellow]Set KIMI_API_KEY environment variable to use Kimi API.[/]")
+        elif settings.llm_provider == "local":
+            console.print("\n[yellow]Make sure local LLM is running at the configured URL.[/]")
         raise typer.Exit(1)
 
-    llm = create_llm_client(
-        api_key=settings.kimi_api_key,
-        base_url=settings.kimi_base_url,
-        model=settings.kimi_model,
-        code_mode=settings.kimi_code_mode,
-    )
+    # Select LLM configuration based on provider
+    if settings.llm_provider == "local":
+        llm = create_llm_client(
+            api_key=settings.local_llm_api_key,
+            base_url=settings.local_llm_base_url,
+            model=settings.local_llm_model,
+            code_mode=False,
+            provider="local",
+        )
+    else:
+        llm = create_llm_client(
+            api_key=settings.kimi_api_key,
+            base_url=settings.kimi_base_url,
+            model=settings.kimi_model,
+            code_mode=settings.kimi_code_mode,
+            provider="kimi",
+        )
 
     obsidian = ObsidianClient(
         vault_name=settings.obsidian_vault,

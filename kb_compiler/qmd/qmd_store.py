@@ -50,9 +50,16 @@ class QmdIndexStore:
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
             self._conn = sqlite3.connect(str(self.db_path))
             self._conn.row_factory = sqlite3.Row
-            self._conn.enable_load_extension(True)
-            sqlite_vec.load(self._conn)  # type: ignore
-            self._conn.enable_load_extension(False)
+            if hasattr(self._conn, "enable_load_extension"):
+                self._conn.enable_load_extension(True)
+                sqlite_vec.load(self._conn)  # type: ignore
+                self._conn.enable_load_extension(False)
+            else:
+                raise RuntimeError(
+                    "Your Python build does not support SQLite extension loading. "
+                    "Please use a Python compiled with loadable extension support "
+                    "(e.g., Homebrew Python on macOS: /opt/homebrew/bin/python3)."
+                )
         return self._conn
 
     def rebuild(self, chunks: list[Chunk], embeddings: list[list[float]]) -> None:

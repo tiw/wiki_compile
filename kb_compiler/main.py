@@ -313,7 +313,7 @@ def compile(
                     embedding_dim=embedder.dim,
                 )
                 engine = QmdSearchEngine(
-                    wiki_dir=settings.wiki_dir,
+                    wiki_dir=settings.obsidian_vault_path or settings.wiki_dir,
                     store=store,
                     embedder=embedder,
                     chunker=Chunker(),
@@ -380,7 +380,7 @@ def query(
                 embedding_dim=embedder.dim,
             )
             engine = QmdSearchEngine(
-                wiki_dir=settings.wiki_dir,
+                wiki_dir=settings.obsidian_vault_path or settings.wiki_dir,
                 store=store,
                 embedder=embedder,
                 chunker=Chunker(),

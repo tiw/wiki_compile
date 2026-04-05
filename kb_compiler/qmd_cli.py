@@ -1,6 +1,7 @@
 """Standalone qmd CLI entry point."""
 
 import asyncio
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -28,12 +29,29 @@ app = typer.Typer(
 console = Console()
 
 
+@app.callback()
+def main(
+    vault: Optional[str] = typer.Option(
+        None, "--vault", "-v", help="Obsidian vault path"
+    ),
+):
+    """qmd - Query-markdown hybrid search CLI."""
+    if vault:
+        if "/" in vault or "\\" in vault or vault.startswith("~"):
+            os.environ["KB_OBSIDIAN_VAULT_PATH"] = str(Path(vault).expanduser())
+        else:
+            os.environ["KB_OBSIDIAN_VAULT"] = vault
+
+
 def _get_engine() -> QmdSearchEngine:
     """Initialize QmdSearchEngine from settings."""
     settings = get_settings()
     settings.ensure_directories()
 
+    # Prefer obsidian_vault_path when set, otherwise fallback to wiki_dir
+    wiki_dir = settings.obsidian_vault_path or settings.wiki_dir
     db_path = settings.meta_dir / "qmd.db"
+    db_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Auto-detect embedding provider from local LLM settings if available
     embedder = create_embedding_provider(
@@ -46,7 +64,7 @@ def _get_engine() -> QmdSearchEngine:
     store = QmdIndexStore(db_path=db_path, embedding_dim=embedder.dim)
 
     return QmdSearchEngine(
-        wiki_dir=settings.wiki_dir,
+        wiki_dir=wiki_dir,
         store=store,
         embedder=embedder,
         chunker=Chunker(),
